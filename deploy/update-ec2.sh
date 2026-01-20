@@ -15,8 +15,12 @@ COMMAND_ID=$(aws ssm send-command \
     --region "$REGION" \
     --document-name "AWS-RunShellScript" \
     --parameters 'commands=[
+        "export HOME=/root",
+        "git config --global --add safe.directory /home/mcpuser/app",
         "cd /home/mcpuser/app",
-        "GIT_SSH_COMMAND=\"ssh -i /root/.ssh/github_deploy_key -o StrictHostKeyChecking=no\" git pull origin main",
+        "GIT_SSH_COMMAND=\"ssh -i /root/.ssh/github_deploy_key -o StrictHostKeyChecking=no\" git fetch origin main",
+        "git reset --hard origin/main",
+        "chown -R mcpuser:mcpuser /home/mcpuser/app",
         "source venv/bin/activate",
         "pip install -r requirements.txt -q",
         "systemctl restart accessibility-mcp",
