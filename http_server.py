@@ -161,6 +161,15 @@ def resolve_file_path(value: str) -> str:
     if value.startswith("@"):
         value = value[1:]
 
+    # Check for unresolved placeholder strings - return helpful error
+    placeholder_patterns = ["file_id", "output_file", "pdf_path", "input_file"]
+    if value.lower() in placeholder_patterns:
+        raise ValueError(
+            f"Received placeholder '{value}' instead of actual file path. "
+            f"Please use the actual file_path returned from /upload or output_path from previous tool calls. "
+            f"Available files in uploads: {list(UPLOAD_DIR.iterdir()) if UPLOAD_DIR.exists() else []}"
+        )
+
     # If it's already an absolute path that exists, use it
     if value.startswith("/") and Path(value).exists():
         return value
