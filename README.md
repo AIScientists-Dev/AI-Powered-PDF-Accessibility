@@ -50,8 +50,8 @@ The easiest way — no setup required:
 
 ```bash
 # Clone the repository
-git clone https://github.com/AIScientists-Dev/pdf-accessibility-ai.git
-cd pdf-accessibility-ai
+git clone https://github.com/AIScientists-Dev/AI-Powered-PDF-Accessibility.git
+cd AI-Powered-PDF-Accessibility
 
 # Create virtual environment
 python3.11 -m venv venv
@@ -242,8 +242,8 @@ Deploy on any cloud provider (AWS, GCP, Azure) or on-premises:
 
 ```bash
 # Clone and setup
-git clone https://github.com/AIScientists-Dev/pdf-accessibility-ai.git
-cd pdf-accessibility-ai
+git clone https://github.com/AIScientists-Dev/AI-Powered-PDF-Accessibility.git
+cd AI-Powered-PDF-Accessibility
 
 # Configure environment
 cp .env.example .env
@@ -282,7 +282,7 @@ We welcome contributions! This project is open source under the MIT License.
 
 ```bash
 # Fork and clone
-git clone https://github.com/YOUR_USERNAME/pdf-accessibility-ai.git
+git clone https://github.com/YOUR_USERNAME/AI-Powered-PDF-Accessibility.git
 
 # Install dev dependencies
 pip install -r requirements.txt

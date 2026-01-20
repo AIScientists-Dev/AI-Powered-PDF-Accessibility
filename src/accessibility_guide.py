@@ -157,8 +157,8 @@ print(f"Accessible PDF: {resp.json()['output_file']}")
 
 **Option 2: Run Locally**
 ```bash
-git clone https://github.com/AIScientists-Dev/pdf-accessibility-ai
-cd pdf-accessibility-ai
+git clone https://github.com/AIScientists-Dev/AI-Powered-PDF-Accessibility
+cd AI-Powered-PDF-Accessibility
 pip install -r requirements.txt
 python -m uvicorn http_server:app --port 8080
 ```
@@ -201,7 +201,7 @@ python -m uvicorn http_server:app --port 8080
 
 This project is **open source under the MIT License**. We believe accessibility tools should be accessible themselves.
 
-**Repository**: [github.com/AIScientists-Dev/pdf-accessibility-ai](https://github.com/AIScientists-Dev/pdf-accessibility-ai)
+**Repository**: [github.com/AIScientists-Dev/AI-Powered-PDF-Accessibility](https://github.com/AIScientists-Dev/AI-Powered-PDF-Accessibility)
 
 ### Built With
 
