@@ -27,7 +27,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 # Import the MCP server components
-from src.mcp_server import call_tool, list_tools
+from src.mcp_server import call_tool, list_tools, run_verapdf
+from src.validator import calculate_morphmind_score
 
 
 # ============================================
@@ -291,6 +292,130 @@ async def execute_batch(request: BatchRequest):
             })
 
     return {"results": results}
+
+
+# ============================================
+# Agent-Friendly Structured Endpoints
+# ============================================
+# These endpoints return structured JSON specifically designed for
+# programmatic agent consumption (vs MCP text for human display)
+
+@app.post("/agent/validate")
+async def agent_validate_pdfua(request: ToolRequest):
+    """
+    Agent-friendly PDF/UA validation that returns structured JSON.
+
+    Returns:
+        - score: MorphMind Accessibility Score (0-100)
+        - grade: Letter grade (A-F)
+        - compliant: Boolean PDF/UA compliance
+        - summary: Pass/fail counts
+        - failures: List of specific failures with clause info
+        - issues_by_severity: Breakdown by critical/serious/moderate/minor
+    """
+    try:
+        pdf_path = request.arguments.get("pdf_path")
+        profile = request.arguments.get("profile", "ua1")
+
+        # Resolve file path
+        pdf_path = resolve_file_path(pdf_path)
+
+        # Run veraPDF directly for structured result
+        result = run_verapdf(pdf_path, profile)
+
+        if "error" in result:
+            return {
+                "success": False,
+                "error": result["error"]
+            }
+
+        # Calculate MorphMind score
+        failures_for_score = []
+        for failure in result.get("failures", []):
+            failures_for_score.append({
+                "clause": failure.get("clause", ""),
+                "test": failure.get("test_number"),
+                "message": failure.get("description", ""),
+                "count": len(failure.get("checks", [1])),
+            })
+
+        morphmind = calculate_morphmind_score(
+            passed_rules=result['summary']['passed_rules'],
+            failed_rules=result['summary']['failed_rules'],
+            passed_checks=result['summary']['passed_checks'],
+            failed_checks=result['summary']['failed_checks'],
+            failures=failures_for_score,
+        )
+
+        return {
+            "success": True,
+            "score": morphmind.score,
+            "grade": morphmind.grade,
+            "compliant": result["compliant"],
+            "profile": result.get("profile", profile),
+            "summary": result["summary"],
+            "issues_by_severity": morphmind.issues_by_severity,
+            "category_scores": morphmind.category_scores,
+            "failures": [
+                {
+                    "clause": f.get("clause"),
+                    "test_number": f.get("test_number"),
+                    "description": f.get("description"),
+                    "check_count": len(f.get("checks", [])),
+                }
+                for f in result.get("failures", [])[:20]  # Limit to 20
+            ],
+            "total_failures": len(result.get("failures", [])),
+        }
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@app.post("/agent/make-accessible")
+async def agent_make_accessible(request: ToolRequest):
+    """
+    Agent-friendly make_accessible that returns structured JSON with output_file.
+
+    Returns:
+        - output_file: The file_id of the processed PDF (can be used directly in subsequent calls)
+        - output_path: Full path to the processed PDF
+        - figures_processed: Number of figures with alt-text added
+        - structure_enhancements: What was added (headings, links, metadata)
+    """
+    try:
+        resolved_args = resolve_arguments(request.arguments)
+
+        # Execute the tool
+        result = await call_tool("make_accessible", resolved_args)
+
+        if result and hasattr(result[0], 'text'):
+            parsed = json.loads(result[0].text)
+
+            # Extract file_id from output_path for easy reuse
+            output_path = parsed.get("output_path", "")
+            output_file = Path(output_path).name if output_path else None
+
+            return {
+                "success": parsed.get("success", True),
+                "output_file": output_file,  # Just the filename for easy use
+                "output_path": output_path,   # Full path if needed
+                "figures_processed": parsed.get("figures_processed", 0),
+                "alt_texts": parsed.get("alt_texts", []),
+                "structure_enhancements": parsed.get("structure_enhancements", {}),
+                "validation": parsed.get("validation", {}),
+            }
+
+        return {"success": False, "error": "No result from make_accessible"}
+
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 
 # ============================================
