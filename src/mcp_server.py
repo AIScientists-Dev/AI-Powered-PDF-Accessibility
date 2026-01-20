@@ -41,6 +41,7 @@ from .latex_processor import (
     extract_title_from_latex, extract_author_from_latex,
     check_figure_files, get_missing_figures_prompt, resolve_image_path
 )
+from .accessibility_guide import get_accessibility_tutorial, format_tutorial_for_display
 
 
 # ============================================
@@ -617,6 +618,22 @@ async def list_tools():
             inputSchema={
                 "type": "object",
                 "properties": {},
+                "required": [],
+            },
+        ),
+        # Educational tool
+        Tool(
+            name="get_accessibility_tutorial",
+            description="Get educational content about PDF accessibility, common challenges, and how AI agents help. Perfect for users who want to learn about accessibility or understand what this tool does. Topics: 'what_is_accessibility', 'common_struggles', 'how_we_help', 'getting_started', 'about_project'. Leave topic empty for overview.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string",
+                        "description": "Specific topic to learn about. Options: what_is_accessibility, common_struggles, how_we_help, getting_started, about_project. Leave empty for overview.",
+                        "enum": ["what_is_accessibility", "common_struggles", "how_we_help", "getting_started", "about_project"],
+                    },
+                },
                 "required": [],
             },
         ),
@@ -1328,6 +1345,12 @@ alongside manual accessibility review.*
         except Exception as e:
             output = f"**veraPDF Installation: ERROR**\n\n{str(e)}"
 
+        return [TextContent(type="text", text=output)]
+
+    elif name == "get_accessibility_tutorial":
+        topic = arguments.get("topic")
+        tutorial = get_accessibility_tutorial(topic)
+        output = format_tutorial_for_display(tutorial)
         return [TextContent(type="text", text=output)]
 
     else:

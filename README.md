@@ -1,89 +1,144 @@
-# Accessibility MCP Server
+<p align="center">
+  <img src="https://img.shields.io/badge/MCP-Model%20Context%20Protocol-blue?style=for-the-badge" alt="MCP">
+  <img src="https://img.shields.io/badge/PDF%2FUA-ISO%2014289-green?style=for-the-badge" alt="PDF/UA">
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="MIT License">
+  <img src="https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python" alt="Python">
+</p>
 
-PDF and LaTeX accessibility enhancement tools powered by MCP (Model Context Protocol). Includes AI-generated alt-text, PDF/UA validation with MorphMind Accessibility Score, and automated remediation.
+<h1 align="center">Accessibility Agent Backend</h1>
 
-## Features
+<p align="center">
+  <b>AI-powered PDF accessibility remediation with MorphMind Accessibility Score</b>
+</p>
 
-- **23 accessibility tools** for PDF and LaTeX documents
-- **MorphMind Accessibility Score** (0-100) based on PDF/UA compliance
-- **AI-powered alt-text generation** using Google Gemini
-- **veraPDF validation** for PDF/UA-1, PDF/UA-2, and PDF/A standards
-- **Automatic structure tagging** (headings, links, metadata)
+<p align="center">
+  Transform inaccessible PDFs into PDF/UA compliant documents in minutes, not hours.<br>
+  Built on MCP (Model Context Protocol) for seamless AI agent integration.
+</p>
 
-## Architecture
+<p align="center">
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-features">Features</a> •
+  <a href="#-api-reference">API Reference</a> •
+  <a href="#-deployment">Deployment</a> •
+  <a href="#-contributing">Contributing</a>
+</p>
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    EC2 Server (c6i.2xlarge)                 │
-│                                                             │
-│  ┌─────────────────────────┐  ┌─────────────────────────┐  │
-│  │  HTTP API (Port 8080)   │  │  MCP HTTP (Port 8081)   │  │
-│  │  For AgentLab/Fargate   │  │  For Claude Code        │  │
-│  │  (Internal VPC only)    │  │  (Future - not exposed) │  │
-│  └───────────┬─────────────┘  └───────────┬─────────────┘  │
-│              │                            │                 │
-│              └──────────┬─────────────────┘                 │
-│                         │                                   │
-│              ┌──────────▼──────────┐                       │
-│              │   src/mcp_server.py │                       │
-│              │   (Tool Implementations)                    │
-│              └─────────────────────┘                       │
-└─────────────────────────────────────────────────────────────┘
-```
+---
 
-## Endpoints
+## Acknowledgements
 
-### Agent-Friendly Endpoints (Recommended)
+This project was developed in collaboration with the **[MorphMind](https://morphmind.ai)** team. MorphMind AgentLab provides the platform where this accessibility agent comes to life — enabling anyone to build powerful AI agents through an intuitive interface.
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/agent/validate` | POST | PDF/UA validation with structured JSON response |
-| `/agent/make-accessible` | POST | Full remediation pipeline with `output_file` for chaining |
+Special thanks to the MorphMind team for their vision of democratizing AI agent development.
 
-### Standard Tool Endpoints
+---
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check |
-| `/tools` | GET | List all available tools |
-| `/tools/{name}` | POST | Execute any tool |
-| `/upload` | POST | Upload PDF/LaTeX file |
-| `/download/{file_id}` | GET | Download processed file |
+## 🚀 Quick Start
 
-## Quick Start
+### Option 1: Local Development
 
-### For AgentLab Integration
+```bash
+# Clone the repository
+git clone https://github.com/AIScientists-Dev/Accessibility-Agent-Backend.git
+cd Accessibility-Agent-Backend
 
-```python
-import requests
+# Create virtual environment
+python3.11 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-BACKEND_URL = "http://172.31.15.119:8080"
+# Install dependencies
+pip install -r requirements.txt
 
-# 1. Upload PDF
-with open("document.pdf", "rb") as f:
-    resp = requests.post(f"{BACKEND_URL}/upload", files={"file": f})
-file_id = resp.json()["file_id"]
+# Install veraPDF (required for validation)
+# macOS:
+brew install verapdf
+# Linux: Download from https://verapdf.org/software/
 
-# 2. Validate (get score)
-resp = requests.post(f"{BACKEND_URL}/agent/validate",
-    json={"arguments": {"pdf_path": file_id}})
-result = resp.json()
-print(f"Score: {result['score']}/100, Grade: {result['grade']}")
+# Set up environment
+echo "GEMINI_API_KEY=your_api_key_here" > .env
 
-# 3. Make accessible
-resp = requests.post(f"{BACKEND_URL}/agent/make-accessible",
-    json={"arguments": {"pdf_path": file_id, "document_type": "technical report"}})
-output_file = resp.json()["output_file"]
+# Run the server
+python -m uvicorn http_server:app --host 0.0.0.0 --port 8080
 
-# 4. Validate again
-resp = requests.post(f"{BACKEND_URL}/agent/validate",
-    json={"arguments": {"pdf_path": output_file}})
-print(f"New Score: {resp.json()['score']}/100")
+# Test it
+curl http://localhost:8080/health
 ```
 
-### Response Examples
+### Option 2: Use via MorphMind AgentLab
 
-**`/agent/validate` response:**
+The easiest way — no setup required:
+
+1. Visit [morphmind.ai](https://morphmind.ai)
+2. Find the PDF Accessibility Remediator agent
+3. Upload your PDF and get instant results
+
+### Option 3: Docker (Coming Soon)
+
+```bash
+docker run -p 8080:8080 -e GEMINI_API_KEY=xxx ghcr.io/aiscientists-dev/accessibility-agent
+```
+
+---
+
+## ✨ Features
+
+### 🎯 MorphMind Accessibility Score
+
+Get an instant **0-100 score** based on PDF/UA compliance, with letter grades and actionable insights.
+
+```json
+{
+  "score": 82,
+  "grade": "B",
+  "issues_by_severity": {
+    "critical": 0,
+    "serious": 3,
+    "moderate": 1
+  }
+}
+```
+
+### 🤖 AI-Powered Alt-Text
+
+Automatically generate descriptive alt-text for images and figures using Google Gemini vision AI.
+
+### 📋 24 Specialized Tools
+
+| Category | Tools |
+|----------|-------|
+| **Analysis** | `analyze_pdf`, `validate_pdfua`, `validate_pdfa`, `detect_headings` |
+| **Remediation** | `make_accessible`, `add_full_structure`, `add_alt_text`, `fix_link_alt_texts` |
+| **Figures** | `extract_figures`, `generate_alt_text`, `get_link_annotations` |
+| **LaTeX** | `analyze_latex`, `prepare_latex`, `make_latex_accessible` |
+| **Education** | `get_accessibility_tutorial` |
+
+### 🏗️ Built on Standards
+
+- **MCP** (Model Context Protocol) - Anthropic's standard for AI tool integration
+- **PDF/UA** (ISO 14289) - International PDF accessibility standard
+- **veraPDF** - Industry-standard validation engine
+- **WCAG 2.1** - Web Content Accessibility Guidelines alignment
+
+---
+
+## 📖 API Reference
+
+### Agent-Optimized Endpoints
+
+These endpoints return clean, structured JSON designed for AI agent consumption:
+
+#### `POST /agent/validate`
+
+Validate PDF against PDF/UA with MorphMind Score.
+
+```bash
+curl -X POST http://localhost:8080/agent/validate \
+  -H "Content-Type: application/json" \
+  -d '{"arguments": {"pdf_path": "/path/to/file.pdf"}}'
+```
+
+**Response:**
 ```json
 {
   "success": true,
@@ -92,9 +147,7 @@ print(f"New Score: {resp.json()['score']}/100")
   "compliant": false,
   "summary": {
     "passed_rules": 100,
-    "failed_rules": 4,
-    "passed_checks": 19460,
-    "failed_checks": 4
+    "failed_rules": 4
   },
   "issues_by_severity": {
     "critical": 0,
@@ -102,105 +155,190 @@ print(f"New Score: {resp.json()['score']}/100")
     "moderate": 1,
     "minor": 0
   },
-  "failures": [...]
+  "failures": [
+    {
+      "clause": "7.1",
+      "test_number": "10",
+      "description": "DisplayDocTitle key missing"
+    }
+  ]
 }
 ```
 
-**`/agent/make-accessible` response:**
+#### `POST /agent/make-accessible`
+
+Full remediation pipeline with AI alt-text generation.
+
+```bash
+curl -X POST http://localhost:8080/agent/make-accessible \
+  -H "Content-Type: application/json" \
+  -d '{"arguments": {"pdf_path": "file_id", "document_type": "technical report"}}'
+```
+
+**Response:**
 ```json
 {
   "success": true,
   "output_file": "abc123_document_accessible.pdf",
-  "output_path": "/tmp/.../abc123_document_accessible.pdf",
   "figures_processed": 3,
-  "alt_texts": [...],
   "structure_enhancements": {
-    "xmp_metadata_added": true,
     "headings_tagged": 15,
-    "links_fixed": 8
+    "links_fixed": 8,
+    "xmp_metadata_added": true
   }
 }
 ```
 
-## Available Tools
+### Standard Endpoints
 
-### PDF Analysis & Validation
-- `analyze_pdf` - Analyze accessibility status
-- `validate_pdfua` - PDF/UA validation with MorphMind Score
-- `validate_pdfa` - PDF/A validation
-- `validate_accessibility` - Quick accessibility check
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/tools` | GET | List all available tools |
+| `/tools/{name}` | POST | Execute any tool by name |
+| `/upload` | POST | Upload PDF file, returns `file_id` |
+| `/download/{file_id}` | GET | Download processed file |
+| `/batch` | POST | Execute multiple tools in sequence |
 
-### PDF Remediation
-- `make_accessible` - Full pipeline (structure + alt-text)
-- `add_structure_tags` - Basic structure tagging
-- `add_full_structure` - Comprehensive structure (metadata, headings, links)
-- `add_alt_text` - Add alt-text to specific figure
-- `fix_link_alt_texts` - Add alt-text to links
+---
 
-### Figure Processing
-- `extract_figures` - Extract all figures from PDF
-- `generate_alt_text` - AI-generated alt-text for image
-- `detect_headings` - Detect heading hierarchy
-- `get_link_annotations` - List all links
+## 🏛️ Architecture
 
-### LaTeX Support
-- `analyze_latex` - Analyze LaTeX for accessibility
-- `prepare_latex` - Add accessibility preamble
-- `make_latex_accessible` - Full LaTeX pipeline
-- `add_latex_alt_text` - Add alt-text to LaTeX figure
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Your Application                         │
+│                    (AgentLab, Claude Code, etc.)                │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    Accessibility Agent Backend                   │
+│  ┌─────────────────────────┐  ┌─────────────────────────────┐  │
+│  │  HTTP API (Port 8080)   │  │  MCP Transport (Port 8081)  │  │
+│  │  • /agent/validate      │  │  • Streamable HTTP          │  │
+│  │  • /agent/make-accessible│  │  • For Claude Code (future) │  │
+│  │  • /upload, /download   │  │  • API Key authenticated    │  │
+│  └───────────┬─────────────┘  └───────────┬─────────────────┘  │
+│              │                            │                     │
+│              └──────────┬─────────────────┘                     │
+│                         ▼                                       │
+│              ┌─────────────────────────┐                       │
+│              │   src/mcp_server.py     │                       │
+│              │   24 Accessibility Tools │                       │
+│              └───────────┬─────────────┘                       │
+│                          │                                      │
+│    ┌─────────────────────┼─────────────────────┐               │
+│    ▼                     ▼                     ▼               │
+│ ┌──────────┐      ┌────────────┐      ┌────────────┐          │
+│ │ veraPDF  │      │  Gemini AI │      │  pikepdf   │          │
+│ │Validation│      │  Alt-text  │      │PDF Editing │          │
+│ └──────────┘      └────────────┘      └────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-## Deployment
+---
 
-### Prerequisites
-- AWS CLI configured
-- EC2 instance running (i-0e875c3fc07d73dca)
-- SSH deploy key configured
+## 🚢 Deployment
 
-### Deploy Updates
+### AWS EC2 (Current Production)
+
+| Component | Value |
+|-----------|-------|
+| Instance | i-0e875c3fc07d73dca (c6i.2xlarge) |
+| Private IP | 172.31.15.119:8080 |
+| Region | us-east-1 |
+| VPC | Default VPC |
+
+**Deploy updates:**
 ```bash
 ./deploy/update-ec2.sh
 ```
 
-### GitHub Actions (CI/CD)
-Push to `main` triggers automatic deployment. Requires GitHub secrets:
-- `AWS_ACCESS_KEY_ID`
-- `AWS_SECRET_ACCESS_KEY`
+**CI/CD:** Push to `main` triggers GitHub Actions deployment.
 
-## Infrastructure
+### Environment Variables
 
-| Component | Value |
-|-----------|-------|
-| EC2 Instance | i-0e875c3fc07d73dca |
-| Instance Type | c6i.2xlarge |
-| Private IP | 172.31.15.119 |
-| Port | 8080 |
-| VPC | Default VPC (vpc-09dff21e271372a41) |
-| Region | us-east-1 |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `GEMINI_API_KEY` | Google Gemini API key for alt-text generation | Yes |
+| `PORT` | HTTP server port (default: 8080) | No |
+| `HOST` | Bind address (default: 0.0.0.0) | No |
+| `MCP_API_KEYS` | Comma-separated API keys for MCP transport | No |
 
-## Security
+---
 
-- HTTP API (8080) restricted to VPC CIDR only
-- No public SSH access (use SSM)
-- MCP HTTP (8081) not exposed (future use)
-- Gemini API key stored in `/home/mcpuser/app/.env`
+## 🤝 Contributing
 
-## Future: MCP for Claude Code
+We welcome contributions! This project is open source under the MIT License.
 
-The `mcp_http_transport.py` implements MCP Streamable HTTP transport for future public access. Not currently deployed. When enabled, Claude Code users can connect with:
+### Areas Where Help is Needed
+
+- 🌍 **Internationalization** - Support for more languages
+- 📊 **Table remediation** - Improve complex table handling
+- 📐 **Math accessibility** - Better equation support
+- 🧪 **Testing** - More diverse PDF test cases
+- 📚 **Documentation** - Tutorials and guides
+
+### Development Setup
 
 ```bash
-claude mcp add accessibility --transport http https://your-domain/mcp \
-    --header "X-API-Key: <key>"
+# Fork and clone
+git clone https://github.com/YOUR_USERNAME/Accessibility-Agent-Backend.git
+
+# Install dev dependencies
+pip install -r requirements.txt
+pip install pytest black flake8
+
+# Run tests
+pytest
+
+# Format code
+black .
 ```
 
-## Dependencies
+---
 
-- Python 3.11
-- FastAPI + Uvicorn
-- pikepdf, PyMuPDF
-- google-generativeai (Gemini)
-- veraPDF 1.26+
+## 📊 Why Accessibility Matters
 
-## License
+- **1 billion+ people** worldwide have disabilities (WHO)
+- **90%+ of PDFs** lack proper accessibility features
+- **Legal requirements** in most countries (ADA, Section 508, EU Directive)
+- **2-4 hours** → **2-4 minutes**: Time savings with AI automation
 
-MIT
+### The Agent Includes Educational Content
+
+Ask the agent about accessibility:
+```bash
+curl -X POST http://localhost:8080/tools/get_accessibility_tutorial \
+  -H "Content-Type: application/json" \
+  -d '{"arguments": {"topic": "what_is_accessibility"}}'
+```
+
+Topics available:
+- `what_is_accessibility` - Introduction to PDF accessibility
+- `common_struggles` - Challenges people face
+- `how_we_help` - How AI agents solve these problems
+- `getting_started` - Quick start guide
+- `about_project` - About this project
+
+---
+
+## 📜 License
+
+MIT License - Use freely, contribute back if you can.
+
+---
+
+## 🔗 Links
+
+- **MorphMind AgentLab**: [morphmind.ai](https://morphmind.ai)
+- **AIScientists**: [aiscientists.dev](https://aiscientists.dev)
+- **MCP Specification**: [modelcontextprotocol.io](https://modelcontextprotocol.io)
+- **veraPDF**: [verapdf.org](https://verapdf.org)
+- **PDF/UA Standard**: [ISO 14289](https://www.iso.org/standard/64599.html)
+
+---
+
+<p align="center">
+  Built with ❤️ by <a href="https://aiscientists.dev">AIScientists</a> & <a href="https://morphmind.ai">MorphMind</a>
+</p>
