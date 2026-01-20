@@ -1,0 +1,16 @@
+[Unit]
+Description=Accessibility MCP HTTP Transport Server
+After=network.target
+
+[Service]
+Type=simple
+User=mcpuser
+WorkingDirectory=/home/mcpuser/app
+Environment=PATH=/home/mcpuser/app/venv/bin:/usr/local/bin:/usr/bin
+EnvironmentFile=/home/mcpuser/app/.env
+ExecStart=/home/mcpuser/app/venv/bin/python -m uvicorn mcp_http_transport:app --host 0.0.0.0 --port 8081
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
