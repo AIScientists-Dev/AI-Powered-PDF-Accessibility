@@ -157,8 +157,8 @@ print(f"Accessible PDF: {resp.json()['output_file']}")
 
 **Option 2: Run Locally**
 ```bash
-git clone https://github.com/AIScientists-Dev/Accessibility-Agent-Backend
-cd Accessibility-Agent-Backend
+git clone https://github.com/AIScientists-Dev/pdf-accessibility-ai
+cd pdf-accessibility-ai
 pip install -r requirements.txt
 python -m uvicorn http_server:app --port 8080
 ```
@@ -195,13 +195,13 @@ python -m uvicorn http_server:app --port 8080
     "about_project": {
         "title": "About This Project",
         "content": """
-## About Accessibility-Agent-Backend
+## About This Project
 
 ### Open Source
 
 This project is **open source under the MIT License**. We believe accessibility tools should be accessible themselves.
 
-**Repository**: [github.com/AIScientists-Dev/Accessibility-Agent-Backend](https://github.com/AIScientists-Dev/Accessibility-Agent-Backend)
+**Repository**: [github.com/AIScientists-Dev/pdf-accessibility-ai](https://github.com/AIScientists-Dev/pdf-accessibility-ai)
 
 ### Built With
 
@@ -213,15 +213,13 @@ This project is **open source under the MIT License**. We believe accessibility 
 
 ### The Team
 
-Developed by [AIScientists](https://aiscientists.dev) in collaboration with the [MorphMind](https://morphmind.ai) team.
+Developed in collaboration with [MorphMind](https://morphmind.ai).
 
 ### MorphMind AgentLab
 
-This agent demonstrates the power of MorphMind AgentLab - a platform where anyone can build, deploy, and share AI agents without writing complex code.
+This agent is available on MorphMind AgentLab - a platform where anyone can build, deploy, and share AI agents.
 
-The entire PDF Accessibility Remediator agent was built using AgentLab's visual tools, connecting to this backend via simple HTTP calls. What would traditionally require a team of developers can now be created by a single person in hours.
-
-**Try it yourself**: [morphmind.ai](https://morphmind.ai)
+**Try it now**: [agentlab.morphmind.ai](https://agentlab.morphmind.ai) — Free trial available
 
 ### Contributing
 

@@ -46,4 +46,4 @@ aws ssm get-command-invocation \
 
 echo ""
 echo "=== Deployment complete ==="
-echo "Test: curl http://172.31.15.119:8080/health"
+echo "Test locally on EC2: curl http://localhost:8080/health"

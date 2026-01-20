@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python" alt="Python">
 </p>
 
-<h1 align="center">Accessibility Agent Backend</h1>
+<h1 align="center">AI-Powered PDF Accessibility</h1>
 
 <p align="center">
   <b>AI-powered PDF accessibility remediation with MorphMind Accessibility Score</b>
@@ -26,22 +26,32 @@
 
 ---
 
-## Acknowledgements
+## About
 
-This project was developed in collaboration with the **[MorphMind](https://morphmind.ai)** team. MorphMind AgentLab provides the platform where this accessibility agent comes to life — enabling anyone to build powerful AI agents through an intuitive interface.
+This project was developed in collaboration with **[MorphMind](https://morphmind.ai)**.
 
-Special thanks to the MorphMind team for their vision of democratizing AI agent development.
+**Try it now — no setup required:** [agentlab.morphmind.ai](https://agentlab.morphmind.ai) (Free trial available)
 
 ---
 
 ## 🚀 Quick Start
 
-### Option 1: Local Development
+### Option 1: Use via MorphMind AgentLab (Recommended)
+
+The easiest way — no setup required:
+
+1. Visit [agentlab.morphmind.ai](https://agentlab.morphmind.ai)
+2. Find the **PDF Accessibility Remediator** agent
+3. Upload your PDF and get instant results
+
+**Free trial available** — start remediating PDFs in seconds.
+
+### Option 2: Local Development
 
 ```bash
 # Clone the repository
-git clone https://github.com/AIScientists-Dev/Accessibility-Agent-Backend.git
-cd Accessibility-Agent-Backend
+git clone https://github.com/AIScientists-Dev/pdf-accessibility-ai.git
+cd pdf-accessibility-ai
 
 # Create virtual environment
 python3.11 -m venv venv
@@ -63,20 +73,6 @@ python -m uvicorn http_server:app --host 0.0.0.0 --port 8080
 
 # Test it
 curl http://localhost:8080/health
-```
-
-### Option 2: Use via MorphMind AgentLab
-
-The easiest way — no setup required:
-
-1. Visit [morphmind.ai](https://morphmind.ai)
-2. Find the PDF Accessibility Remediator agent
-3. Upload your PDF and get instant results
-
-### Option 3: Docker (Coming Soon)
-
-```bash
-docker run -p 8080:8080 -e GEMINI_API_KEY=xxx ghcr.io/aiscientists-dev/accessibility-agent
 ```
 
 ---
@@ -103,7 +99,7 @@ Get an instant **0-100 score** based on PDF/UA compliance, with letter grades an
 
 Automatically generate descriptive alt-text for images and figures using Google Gemini vision AI.
 
-### 📋 24 Specialized Tools
+### 📋 25 Specialized Tools
 
 | Category | Tools |
 |----------|-------|
@@ -207,7 +203,7 @@ curl -X POST http://localhost:8080/agent/make-accessible \
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Your Application                         │
-│                    (AgentLab, Claude Code, etc.)                │
+│                     (AgentLab, Claude Code, etc.)               │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │
                                 ▼
@@ -216,15 +212,15 @@ curl -X POST http://localhost:8080/agent/make-accessible \
 │  ┌─────────────────────────┐  ┌─────────────────────────────┐  │
 │  │  HTTP API (Port 8080)   │  │  MCP Transport (Port 8081)  │  │
 │  │  • /agent/validate      │  │  • Streamable HTTP          │  │
-│  │  • /agent/make-accessible│  │  • For Claude Code (future) │  │
-│  │  • /upload, /download   │  │  • API Key authenticated    │  │
+│  │  • /agent/make-accessible│  │  • API Key authenticated    │  │
+│  │  • /upload, /download   │  │                             │  │
 │  └───────────┬─────────────┘  └───────────┬─────────────────┘  │
 │              │                            │                     │
 │              └──────────┬─────────────────┘                     │
 │                         ▼                                       │
 │              ┌─────────────────────────┐                       │
 │              │   src/mcp_server.py     │                       │
-│              │   24 Accessibility Tools │                       │
+│              │   25 Accessibility Tools │                       │
 │              └───────────┬─────────────┘                       │
 │                          │                                      │
 │    ┌─────────────────────┼─────────────────────┐               │
@@ -240,17 +236,20 @@ curl -X POST http://localhost:8080/agent/make-accessible \
 
 ## 🚢 Deployment
 
-### AWS EC2 (Current Production)
+### Self-Hosted Deployment
 
-| Component | Value |
-|-----------|-------|
-| Instance | i-0e875c3fc07d73dca (c6i.2xlarge) |
-| Private IP | 172.31.15.119:8080 |
-| Region | us-east-1 |
-| VPC | Default VPC |
+Deploy on any cloud provider (AWS, GCP, Azure) or on-premises:
 
-**Deploy updates:**
 ```bash
+# Clone and setup
+git clone https://github.com/AIScientists-Dev/pdf-accessibility-ai.git
+cd pdf-accessibility-ai
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your GEMINI_API_KEY
+
+# Run with systemd (see deploy/ folder for service files)
 ./deploy/update-ec2.sh
 ```
 
@@ -283,7 +282,7 @@ We welcome contributions! This project is open source under the MIT License.
 
 ```bash
 # Fork and clone
-git clone https://github.com/YOUR_USERNAME/Accessibility-Agent-Backend.git
+git clone https://github.com/YOUR_USERNAME/pdf-accessibility-ai.git
 
 # Install dev dependencies
 pip install -r requirements.txt
@@ -305,7 +304,7 @@ black .
 - **Legal requirements** in most countries (ADA, Section 508, EU Directive)
 - **2-4 hours** → **2-4 minutes**: Time savings with AI automation
 
-### The Agent Includes Educational Content
+### Built-in Educational Content
 
 Ask the agent about accessibility:
 ```bash
@@ -331,8 +330,8 @@ MIT License - Use freely, contribute back if you can.
 
 ## 🔗 Links
 
-- **MorphMind AgentLab**: [morphmind.ai](https://morphmind.ai)
-- **AIScientists**: [aiscientists.dev](https://aiscientists.dev)
+- **Try it now**: [agentlab.morphmind.ai](https://agentlab.morphmind.ai) — Free trial available
+- **MorphMind**: [morphmind.ai](https://morphmind.ai)
 - **MCP Specification**: [modelcontextprotocol.io](https://modelcontextprotocol.io)
 - **veraPDF**: [verapdf.org](https://verapdf.org)
 - **PDF/UA Standard**: [ISO 14289](https://www.iso.org/standard/64599.html)
@@ -340,5 +339,5 @@ MIT License - Use freely, contribute back if you can.
 ---
 
 <p align="center">
-  Built with ❤️ by <a href="https://aiscientists.dev">AIScientists</a> & <a href="https://morphmind.ai">MorphMind</a>
+  Built with ❤️ by <a href="https://morphmind.ai">MorphMind</a>
 </p>
