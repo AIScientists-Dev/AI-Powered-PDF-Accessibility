@@ -1,0 +1,362 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Accessibility MCP Server - EC2 Deployment for MorphMind Integration'
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: c6i.2xlarge
+    Description: EC2 instance type (c6i.2xlarge recommended for 30 concurrent users)
+    AllowedValues:
+      - t3.medium
+      - t3.large
+      - c6i.xlarge
+      - c6i.2xlarge
+
+  KeyPairName:
+    Type: String
+    Default: ''
+    Description: (Optional) EC2 Key Pair for SSH access
+
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: Google Gemini API key for alt-text generation
+
+  AllowedCIDR:
+    Type: String
+    Default: '0.0.0.0/0'
+    Description: CIDR range allowed to access the API (use your VPC CIDR for internal only)
+
+Conditions:
+  HasKeyPair: !Not [!Equals [!Ref KeyPairName, '']]
+
+Resources:
+  # VPC and Networking
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: accessibility-mcp-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: accessibility-mcp-igw
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: accessibility-mcp-public-1
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: accessibility-mcp-public-2
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: accessibility-mcp-public-rt
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  # Security Group
+  ServerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for Accessibility MCP Server
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: !Ref AllowedCIDR
+          Description: HTTP API access
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedCIDR
+          Description: SSH access
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref AllowedCIDR
+          Description: HTTPS (for future ALB)
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: accessibility-mcp-sg
+
+  # IAM Role for EC2
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: accessibility-mcp-ec2-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: S3AccessForFiles
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                Resource: !Sub 'arn:aws:s3:::accessibility-mcp-files-${AWS::AccountId}/*'
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: accessibility-mcp-instance-profile
+      Roles:
+        - !Ref EC2Role
+
+  # EC2 Instance
+  MCPServer:
+    Type: AWS::EC2::Instance
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      InstanceType: !Ref InstanceType
+      ImageId: !Sub '{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64}}'
+      SubnetId: !Ref PublicSubnet1
+      SecurityGroupIds:
+        - !Ref ServerSecurityGroup
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      KeyName: !If [HasKeyPair, !Ref KeyPairName, !Ref 'AWS::NoValue']
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 50
+            VolumeType: gp3
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: accessibility-mcp-server
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+
+          # Log all output
+          exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+
+          echo "=== Starting Accessibility MCP Server Setup ==="
+
+          # Update system
+          dnf update -y
+          dnf install -y git python3.11 python3.11-pip java-17-amazon-corretto wget unzip
+
+          # Create app user
+          useradd -m -s /bin/bash mcpuser
+
+          # Install veraPDF
+          echo "=== Installing veraPDF ==="
+          cd /tmp
+          wget -q https://software.verapdf.org/releases/1.26/verapdf-greenfield-1.26.2-installer.zip
+          unzip -q verapdf-greenfield-1.26.2-installer.zip
+          cd verapdf-greenfield-1.26.2
+
+          # Create auto-install config
+          cat > auto-install.xml << 'XMLEOF'
+          <?xml version="1.0" encoding="UTF-8" standalone="no"?>
+          <AutomatedInstallation langpack="eng">
+            <com.izforge.izpack.panels.htmlhello.HTMLHelloPanel id="welcome"/>
+            <com.izforge.izpack.panels.target.TargetPanel id="install_dir">
+              <installpath>/opt/verapdf</installpath>
+            </com.izforge.izpack.panels.target.TargetPanel>
+            <com.izforge.izpack.panels.packs.PacksPanel id="sdk_pack_select">
+              <pack index="0" name="veraPDF Mac and *nix Scripts" selected="true"/>
+              <pack index="1" name="veraPDF Validation model" selected="true"/>
+              <pack index="2" name="veraPDF Documentation" selected="false"/>
+              <pack index="3" name="veraPDF Sample Plugins" selected="false"/>
+            </com.izforge.izpack.panels.packs.PacksPanel>
+            <com.izforge.izpack.panels.install.InstallPanel id="install"/>
+            <com.izforge.izpack.panels.finish.FinishPanel id="finish"/>
+          </AutomatedInstallation>
+          XMLEOF
+
+          java -jar verapdf-greenfield-1.26.2-installer.jar auto-install.xml
+          ln -sf /opt/verapdf/verapdf /usr/local/bin/verapdf
+          chmod +x /opt/verapdf/verapdf
+
+          # Clone repository
+          echo "=== Cloning Repository ==="
+          cd /home/mcpuser
+          git clone https://github.com/YOUR_REPO/accessibility-MCP.git app || {
+            # If repo doesn't exist, create directory structure
+            mkdir -p app
+            echo "Repository not found, will need manual deployment"
+          }
+          chown -R mcpuser:mcpuser /home/mcpuser/app
+
+          # Setup Python environment
+          echo "=== Setting up Python ==="
+          cd /home/mcpuser/app
+          python3.11 -m venv venv
+          source venv/bin/activate
+
+          # Install dependencies
+          pip install --upgrade pip
+          pip install fastapi uvicorn python-multipart
+
+          # Install from requirements if exists
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+
+          # Create environment file
+          echo "=== Creating Environment File ==="
+          cat > /home/mcpuser/app/.env << 'ENVEOF'
+          GEMINI_API_KEY=${GeminiApiKey}
+          PORT=8000
+          HOST=0.0.0.0
+          ENVEOF
+          chmod 600 /home/mcpuser/app/.env
+          chown mcpuser:mcpuser /home/mcpuser/app/.env
+
+          # Create systemd service
+          echo "=== Creating Systemd Service ==="
+          cat > /etc/systemd/system/accessibility-mcp.service << 'SERVICEEOF'
+          [Unit]
+          Description=Accessibility MCP HTTP Server
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=mcpuser
+          WorkingDirectory=/home/mcpuser/app
+          Environment=PATH=/home/mcpuser/app/venv/bin:/usr/local/bin:/usr/bin
+          EnvironmentFile=/home/mcpuser/app/.env
+          ExecStart=/home/mcpuser/app/venv/bin/python -m uvicorn http_server:app --host 0.0.0.0 --port 8000
+          Restart=always
+          RestartSec=10
+
+          [Install]
+          WantedBy=multi-user.target
+          SERVICEEOF
+
+          # Start service (will fail if code not deployed yet, that's OK)
+          systemctl daemon-reload
+          systemctl enable accessibility-mcp
+
+          # Try to start if http_server.py exists
+          if [ -f /home/mcpuser/app/http_server.py ]; then
+            systemctl start accessibility-mcp
+          fi
+
+          echo "=== Setup Complete ==="
+          echo "veraPDF version:"
+          /usr/local/bin/verapdf --version || echo "veraPDF check will work after reboot"
+
+  # Elastic IP for stable endpoint
+  ServerEIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: accessibility-mcp-eip
+
+  EIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      InstanceId: !Ref MCPServer
+      EIP: !Ref ServerEIP
+
+Outputs:
+  ServerPublicIP:
+    Description: Public IP address of the MCP server
+    Value: !Ref ServerEIP
+    Export:
+      Name: AccessibilityMCPServerIP
+
+  APIEndpoint:
+    Description: HTTP API endpoint
+    Value: !Sub 'http://${ServerEIP}:8000'
+    Export:
+      Name: AccessibilityMCPAPIEndpoint
+
+  HealthCheckURL:
+    Description: Health check URL
+    Value: !Sub 'http://${ServerEIP}:8000/health'
+
+  ToolsListURL:
+    Description: URL to list available tools
+    Value: !Sub 'http://${ServerEIP}:8000/tools'
+
+  VPCId:
+    Description: VPC ID for VPC peering with MorphMind
+    Value: !Ref VPC
+    Export:
+      Name: AccessibilityMCPVPCId
+
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref MCPServer
+
+  SSHCommand:
+    Description: SSH command (if key pair provided)
+    Value: !If
+      - HasKeyPair
+      - !Sub 'ssh -i ${KeyPairName}.pem ec2-user@${ServerEIP}'
+      - 'No SSH key configured. Use SSM Session Manager.'
+
+  SSMCommand:
+    Description: SSM Session Manager command
+    Value: !Sub 'aws ssm start-session --target ${MCPServer}'

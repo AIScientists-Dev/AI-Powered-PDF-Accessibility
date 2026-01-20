@@ -1,0 +1,19 @@
+# MCP Server
+mcp>=1.0.0
+
+# PDF Processing
+pikepdf>=8.0.0
+PyMuPDF>=1.23.0
+
+# AI - Gemini
+google-generativeai>=0.3.0
+
+# Image processing
+Pillow>=10.0.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# CLI
+click>=8.0.0
+rich>=13.0.0

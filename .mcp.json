@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "accessibility": {
+      "command": "/Users/jie/Desktop/GitProjects/accessibility-MCP/venv/bin/python",
+      "args": ["/Users/jie/Desktop/GitProjects/accessibility-MCP/run_server.py"]
+    }
+  }
+}
