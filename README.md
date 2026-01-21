@@ -8,12 +8,17 @@
 <h1 align="center">AI-Powered PDF Accessibility</h1>
 
 <p align="center">
-  <b>AI-powered PDF accessibility remediation with MorphMind Accessibility Score</b>
+  <b>Make PDFs accessible to screen readers — automatically</b>
 </p>
 
 <p align="center">
-  Transform inaccessible PDFs into PDF/UA compliant documents in minutes, not hours.<br>
-  Built on MCP (Model Context Protocol) for seamless AI agent integration.
+  Uses <b>AI vision</b> to generate alt-text for images, charts, and math formulas.<br>
+  Adds semantic structure (headings, paragraphs, reading order) for screen reader navigation.<br>
+  Validates against <b>PDF/UA</b> standard with a 0-100 accessibility score.
+</p>
+
+<p align="center">
+  <i>Turn hours of manual remediation into minutes.</i>
 </p>
 
 <p align="center">
