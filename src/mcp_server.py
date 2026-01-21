@@ -251,7 +251,7 @@ async def list_tools():
         ),
         Tool(
             name="make_accessible",
-            description="Full pipeline: analyze PDF, extract figures, generate alt-text, and create accessible PDF.",
+            description="Full pipeline: analyze PDF, extract figures, generate alt-text, and create accessible PDF with semantic structure tags (headings, paragraphs, formulas).",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -267,6 +267,16 @@ async def list_tools():
                         "type": "string",
                         "description": "Type of document for AI context",
                         "default": "academic paper",
+                    },
+                    "use_ai_formula_descriptions": {
+                        "type": "boolean",
+                        "description": "Use AI to generate human-readable descriptions for mathematical formulas. Requires GEMINI_API_KEY.",
+                        "default": False,
+                    },
+                    "max_ai_formulas": {
+                        "type": "integer",
+                        "description": "Maximum number of formulas to describe with AI.",
+                        "default": 50,
                     },
                 },
                 "required": ["pdf_path"],
@@ -756,13 +766,18 @@ async def call_tool(name: str, arguments: dict):
         pdf_path = arguments["pdf_path"]
         output_path = arguments.get("output_path")
         document_type = arguments.get("document_type", "academic paper")
+        use_ai_formula_descriptions = arguments.get("use_ai_formula_descriptions", False)
+        max_ai_formulas = arguments.get("max_ai_formulas", 50)
 
-        # Step 1: Create full structure (includes XMP, tabs, headings, links)
+        # Step 1: Create full structure (includes XMP, tabs, headings, paragraphs, formulas, links)
         structure_result = create_full_structure(
             pdf_path,
             output_path=None,  # Temp output
             tag_headings=True,
+            tag_all_content=True,  # Enable block-level tagging (H1/H2/H3/P/Formula)
             fix_links=True,
+            use_ai_formula_descriptions=use_ai_formula_descriptions,
+            max_ai_formulas=max_ai_formulas,
         )
         working_path = structure_result["output_path"]
 
@@ -803,6 +818,9 @@ async def call_tool(name: str, arguments: dict):
                 "xmp_metadata_added": structure_result.get("xmp_added", False),
                 "tabs_pages_modified": structure_result.get("tabs_pages_modified", 0),
                 "headings_tagged": structure_result.get("headings_tagged", 0),
+                "paragraphs_tagged": structure_result.get("paragraphs_tagged", 0),
+                "formulas_tagged": structure_result.get("formulas_tagged", 0),
+                "ai_formula_descriptions": structure_result.get("ai_formula_descriptions", 0),
                 "links_fixed": structure_result.get("links_fixed", 0),
             },
             "validation": validation,
