@@ -12,6 +12,7 @@
 </p>
 
 <p align="center">
+  Supports <b>PDF</b> and <b>LaTeX</b> input — outputs accessible PDF or modified LaTeX source.<br>
   Uses <b>AI vision</b> to generate alt-text for images, charts, and math formulas.<br>
   Adds semantic structure (headings, paragraphs, reading order) for screen reader navigation.<br>
   Validates against <b>PDF/UA</b> standard with a 0-100 accessibility score.
