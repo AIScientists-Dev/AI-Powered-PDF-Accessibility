@@ -1,8 +1,7 @@
 """
 MCP Server with Streamable HTTP Transport.
 
-This allows Claude Code users to connect to your MCP server remotely via:
-  claude mcp add accessibility-mcp --transport http https://your-server.com/mcp
+This allows MCP-compatible clients to connect to your MCP server remotely.
 
 Security:
 - Requires API key authentication via X-API-Key header
@@ -147,7 +146,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Accessibility MCP Server",
-    description="MCP Server with Streamable HTTP Transport for Claude Code",
+    description="MCP Server with Streamable HTTP Transport",
     version="1.0.0",
     lifespan=lifespan,
 )
@@ -392,7 +391,7 @@ async def root():
         "transport": "Streamable HTTP",
         "mcp_endpoint": "/mcp",
         "usage": {
-            "claude_code": "claude mcp add accessibility --transport http <url>/mcp --header 'X-API-Key: <your-key>'",
+            "example": "mcp add accessibility --transport http <url>/mcp --header 'X-API-Key: <your-key>'",
             "docs": "https://modelcontextprotocol.io/specification/2025-03-26/basic/transports",
         }
     }

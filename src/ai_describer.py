@@ -271,6 +271,143 @@ def generate_alt_texts_batch(
     return results
 
 
+def generate_formula_description(
+    image_data: bytes,
+    context: str = "",
+    api_key: Optional[str] = None,
+) -> str:
+    """
+    Generate a human-readable description of a mathematical formula/equation.
+
+    This is specialized for math content - matrices, equations, integrals, etc.
+    The description is optimized for screen reader users.
+
+    Args:
+        image_data: Image bytes of the rendered formula region (PNG)
+        context: Optional context about the formula (surrounding text)
+        api_key: Optional API key (uses env var if not provided)
+
+    Returns:
+        Human-readable description of the formula
+    """
+    configure_gemini(api_key)
+
+    # Use Gemini 2.0 Flash (supports vision)
+    model = genai.GenerativeModel("gemini-2.0-flash")
+
+    prompt = f"""You are an expert at describing mathematical formulas for blind and visually impaired users.
+
+Describe this mathematical content in plain English that a screen reader user can understand.
+
+Guidelines:
+- For MATRICES: State the dimensions (e.g., "3 by 2 matrix"), then read the values row by row
+  Example: "A 3 by 2 matrix. Row 1: 16,000 and 23. Row 2: 33,000 and 47. Row 3: 21,000 and 35."
+- For EQUATIONS: Read left to right, spell out operations
+  Example: "x equals negative b plus or minus the square root of b squared minus 4ac, all over 2a"
+- For INTEGRALS: Describe the integral sign, limits, and integrand
+  Example: "The integral from 0 to infinity of e to the negative x squared dx"
+- For SUMMATIONS: Describe the sigma notation and terms
+  Example: "The sum from i equals 1 to n of x sub i"
+- For FRACTIONS: Use "over" or "divided by"
+- For SUBSCRIPTS/SUPERSCRIPTS: Use "sub" and "to the power of" or "squared"/"cubed"
+- For GREEK LETTERS: Name them (alpha, beta, gamma, etc.)
+
+Be concise but complete. Include all values and symbols.
+{f"Context from document: {context}" if context else ""}
+
+Respond with ONLY the description, no additional commentary."""
+
+    # Create the image part
+    image_part = {
+        "mime_type": "image/png",
+        "data": base64.b64encode(image_data).decode("utf-8"),
+    }
+
+    try:
+        response = model.generate_content([prompt, image_part])
+        description = response.text.strip()
+        description = description.strip('"\'')
+        return description
+
+    except Exception as e:
+        return f"[Formula description failed: {str(e)}]"
+
+
+def render_pdf_region(
+    pdf_path: str,
+    page_num: int,
+    bbox: tuple,
+    scale: float = 2.0,
+) -> bytes:
+    """
+    Render a specific region of a PDF page as a PNG image.
+
+    Args:
+        pdf_path: Path to the PDF file
+        page_num: Page number (0-indexed)
+        bbox: Bounding box tuple (x0, y0, x1, y1)
+        scale: Scale factor for rendering (default 2.0 for clarity)
+
+    Returns:
+        PNG image bytes of the rendered region
+    """
+    import fitz  # PyMuPDF
+
+    doc = fitz.open(pdf_path)
+    page = doc[page_num]
+
+    # Create a clip rectangle from the bounding box
+    x0, y0, x1, y1 = bbox
+    clip_rect = fitz.Rect(x0, y0, x1, y1)
+
+    # Create a transformation matrix for scaling
+    mat = fitz.Matrix(scale, scale)
+
+    # Render just the clipped region
+    pix = page.get_pixmap(matrix=mat, clip=clip_rect)
+
+    # Convert to PNG bytes
+    png_bytes = pix.tobytes("png")
+
+    doc.close()
+    return png_bytes
+
+
+def describe_formula_from_pdf(
+    pdf_path: str,
+    page_num: int,
+    bbox: tuple,
+    context: str = "",
+    api_key: Optional[str] = None,
+) -> str:
+    """
+    Render a formula region from a PDF and generate a human-readable description.
+
+    This combines rendering and AI description in one call.
+
+    Args:
+        pdf_path: Path to the PDF file
+        page_num: Page number (0-indexed)
+        bbox: Bounding box of the formula (x0, y0, x1, y1)
+        context: Optional context about the formula
+        api_key: Optional API key
+
+    Returns:
+        Human-readable description of the formula
+    """
+    # Render the formula region as an image
+    image_data = render_pdf_region(pdf_path, page_num, bbox, scale=2.0)
+
+    # Generate description using Gemini Vision
+    description = generate_formula_description(
+        image_data=image_data,
+        context=context,
+        api_key=api_key,
+    )
+
+    return description
+
+
 def validate_alt_text(alt_text: str) -> dict:
     """
     Validate alt-text quality based on accessibility guidelines.

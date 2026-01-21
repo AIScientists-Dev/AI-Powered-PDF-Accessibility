@@ -111,7 +111,7 @@ Automatically generate descriptive alt-text for images and figures using Google 
 
 ### 🏗️ Built on Standards
 
-- **MCP** (Model Context Protocol) - Anthropic's standard for AI tool integration
+- **MCP** (Model Context Protocol) - Open standard for AI tool integration
 - **PDF/UA** (ISO 14289) - International PDF accessibility standard
 - **veraPDF** - Industry-standard validation engine
 - **WCAG 2.1** - Web Content Accessibility Guidelines alignment
@@ -203,7 +203,7 @@ curl -X POST http://localhost:8080/agent/make-accessible \
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Your Application                         │
-│                     (AgentLab, Claude Code, etc.)               │
+│                  (AgentLab, MCP Clients, etc.)                  │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │
                                 ▼

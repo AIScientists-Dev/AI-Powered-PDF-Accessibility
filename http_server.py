@@ -630,7 +630,7 @@ async def process_latex(
 @app.get("/openapi-tools")
 async def get_openapi_tools():
     """
-    Get tool definitions in OpenAI/Anthropic function calling format.
+    Get tool definitions in various function calling formats.
     This can be used by MorphMind agents to discover and use these tools.
     """
     tools = await list_tools()
@@ -647,10 +647,10 @@ async def get_openapi_tools():
             }
         })
 
-    # Also provide Anthropic format
-    anthropic_format = []
+    # Also provide alternative format (input_schema style)
+    alt_format = []
     for tool in tools:
-        anthropic_format.append({
+        alt_format.append({
             "name": tool.name,
             "description": tool.description,
             "input_schema": tool.inputSchema,
@@ -658,7 +658,7 @@ async def get_openapi_tools():
 
     return {
         "openai_format": openai_format,
-        "anthropic_format": anthropic_format,
+        "alt_format": alt_format,
         "mcp_format": [
             {
                 "name": tool.name,

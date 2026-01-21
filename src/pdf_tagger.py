@@ -11,7 +11,7 @@ This module handles:
 """
 
 import pikepdf
-from pikepdf import Name, Array, Dictionary, String, Stream
+from pikepdf import Name, Array, Dictionary, String, Stream, parse_content_stream, unparse_content_stream
 from pathlib import Path
 from typing import Optional, List, Tuple
 from datetime import datetime
@@ -523,6 +523,465 @@ def detect_headings(pdf_path: str) -> List[dict]:
     return headings
 
 
+def detect_content_elements(pdf_path: str) -> List[dict]:
+    """
+    Detect all content elements in a PDF: headings, paragraphs, formulas/matrices.
+
+    Uses heuristics based on:
+    - Font size analysis for headings
+    - Text length and structure for paragraphs
+    - Mathematical symbols and bracket patterns for formulas
+
+    Returns list of content elements with type, text, page, and bbox.
+    """
+    elements = []
+    doc = fitz.open(pdf_path)
+
+    # First pass: collect all font sizes to determine thresholds
+    all_font_sizes = []
+    for page in doc:
+        blocks = page.get_text("dict")["blocks"]
+        for block in blocks:
+            if "lines" in block:
+                for line in block["lines"]:
+                    for span in line["spans"]:
+                        size = span["size"]
+                        text = span["text"].strip()
+                        if text and len(text) > 2:
+                            all_font_sizes.append(size)
+
+    if not all_font_sizes:
+        doc.close()
+        return elements
+
+    # Calculate thresholds
+    all_font_sizes.sort()
+    median_size = all_font_sizes[len(all_font_sizes) // 2]
+    h1_threshold = median_size * 1.5
+    h2_threshold = median_size * 1.25
+    h3_threshold = median_size * 1.1
+
+    # Mathematical/formula indicators
+    # Include standard math symbols and Private Use Area (PUA) characters (U+E000-U+F8FF, U+F0000-U+FFFFD)
+    # Many PDFs use PUA for custom bracket glyphs
+    math_brackets = set(['[', ']', '(', ')', '{', '}', '⎡', '⎤', '⎣', '⎦', '⎧', '⎫', '⎨', '⎬', '⎩', '⎭',
+                        '∑', '∏', '∫', '√', '∞', '≠', '≤', '≥', '±', '×', '÷', '·', '∈', '∉', '⊂', '⊃',
+                        '∀', '∃', '∇', '∂', '≈', '≡', '∝', '→', '←', '↔', '⇒', '⇐', '⇔'])
+
+    # Second pass: classify each block
+    for page_num, page in enumerate(doc):
+        blocks = page.get_text("dict")["blocks"]
+
+        for block_idx, block in enumerate(blocks):
+            if "lines" not in block:
+                # Image block - skip for now (handled by figure_extractor)
+                continue
+
+            # Extract block text and properties
+            block_text = ""
+            max_size = 0
+            block_flags = 0
+            has_math_chars = False
+
+            for line in block["lines"]:
+                for span in line["spans"]:
+                    span_text = span["text"]
+                    block_text += span_text
+                    max_size = max(max_size, span["size"])
+                    block_flags |= span["flags"]
+                    # Check for math characters (including PUA range)
+                    for c in span_text:
+                        if c in math_brackets:
+                            has_math_chars = True
+                            break
+                        # Check PUA ranges: U+E000-U+F8FF (BMP PUA) and U+F0000-U+FFFFD (Supplementary PUA-A)
+                        code = ord(c)
+                        if (0xE000 <= code <= 0xF8FF) or (0xF0000 <= code <= 0xFFFFD):
+                            has_math_chars = True
+                            break
+                block_text += " "
+
+            block_text = block_text.strip()
+            bbox = list(block["bbox"])
+
+            # Skip empty blocks or page numbers
+            if not block_text or (block_text.isdigit() and len(block_text) <= 3):
+                continue
+
+            # Classify the block
+            is_bold = bool(block_flags & 2**4)
+            element_type = None
+            heading_level = 0
+
+            # Check if it's a formula/matrix
+            # Criteria: contains math brackets AND is short, or mostly numbers/symbols
+            is_formula = False
+
+            # Count alphabetic vs non-alphabetic characters to determine if it's prose or math
+            alpha_count = sum(1 for c in block_text if c.isalpha())
+            total_chars = len(block_text.replace(" ", ""))
+
+            # If it has math chars but is mostly alphabetic text (>60%), it's probably prose with a symbol
+            if has_math_chars:
+                if total_chars > 0 and alpha_count / total_chars < 0.6:
+                    # Mostly non-alphabetic (numbers, symbols) - likely formula
+                    is_formula = True
+                elif len(block_text) < 30:
+                    # Short block with math chars is likely formula
+                    is_formula = True
+
+            # Also check for matrix/array patterns
+            if not is_formula:
+                if re.search(r'[\[\(⎡⎣]\s*[\d,.\s]+', block_text):
+                    # Pattern like "[16,000 23" suggesting matrix
+                    is_formula = True
+                elif len(block_text) < 50 and re.match(r'^[\d\s,.\-\+\*\/\=\<\>]+$', block_text):
+                    # Short block with mostly numbers and operators
+                    is_formula = True
+
+            if is_formula:
+                element_type = "Formula"
+            # Check if heading
+            elif max_size >= h1_threshold and len(block_text) < 200:
+                element_type = "H1"
+                heading_level = 1
+            elif max_size >= h2_threshold and len(block_text) < 200:
+                element_type = "H2"
+                heading_level = 2
+            elif max_size >= h3_threshold and len(block_text) < 200:
+                element_type = "H3"
+                heading_level = 3
+            elif is_bold and max_size >= median_size and len(block_text) < 100:
+                element_type = "H3"
+                heading_level = 3
+            else:
+                # Default to paragraph
+                element_type = "P"
+
+            elements.append({
+                "type": element_type,
+                "text": block_text[:500],  # Limit text length
+                "page": page_num,
+                "block_idx": block_idx,
+                "bbox": bbox,
+                "font_size": max_size,
+                "heading_level": heading_level,
+            })
+
+    doc.close()
+    return elements
+
+
+def inject_mcids_into_form_xobject(
+    pdf: pikepdf.Pdf,
+    xobj: pikepdf.Object,
+    page_elements: List[dict],
+    page_height: float,
+) -> Tuple[dict, int]:
+    """
+    Inject BDC/EMC marked content operators into a Form XObject's content stream.
+
+    This wraps text segments with appropriate marked content tags based on
+    the element bounding boxes from PyMuPDF.
+
+    Args:
+        pdf: The pikepdf PDF object
+        xobj: The Form XObject to modify
+        page_elements: List of elements for this page with bbox info
+        page_height: Page height for coordinate transformation
+
+    Returns:
+        Tuple of (element_idx -> mcid mapping, total mcid count)
+    """
+    # Parse existing content stream
+    existing_ops = list(parse_content_stream(xobj))
+
+    # Get Form's transformation info
+    form_bbox = [float(x) for x in xobj.BBox] if Name.BBox in xobj else [0, 0, 612, 792]
+
+    # Build mapping of element index to MCID
+    # Each element gets a unique MCID
+    element_mcids = {i: i for i in range(len(page_elements))}
+
+    # Convert page coordinates (PyMuPDF) to form coordinates
+    # PyMuPDF uses top-left origin, PDF uses bottom-left
+    def page_to_form_y(page_y):
+        return page_height - page_y
+
+    # Sort elements by their form-space Y coordinate (top to bottom in visual order)
+    sorted_elems = sorted(enumerate(page_elements),
+                          key=lambda x: -page_to_form_y(x[1]['bbox'][1]))
+
+    # Track current position in form content
+    new_ops = []
+    current_y = None
+    current_elem_idx = 0
+    in_mcid = False
+    last_tm_y = None
+
+    for operands, operator in existing_ops:
+        op = str(operator)
+
+        # Track Y position from Tm (text matrix) operators
+        if op == 'Tm' and len(operands) >= 6:
+            new_y = float(operands[5])  # Y coordinate in form space
+
+            # Check if we should start a new element's MCID based on Y position
+            if last_tm_y is not None and abs(new_y - last_tm_y) > 5:
+                # Significant Y change - might be a new element
+                if in_mcid:
+                    new_ops.append(([], pikepdf.Operator("EMC")))
+                    in_mcid = False
+                    current_elem_idx += 1
+
+            if not in_mcid and current_elem_idx < len(page_elements):
+                # Start new MCID
+                elem = page_elements[current_elem_idx]
+                struct_type = Name("/" + elem['type'])
+                props = Dictionary({"/MCID": current_elem_idx})
+                new_ops.append(([struct_type, props], pikepdf.Operator("BDC")))
+                in_mcid = True
+
+            last_tm_y = new_y
+
+        new_ops.append((operands, operator))
+
+    # Close any open MCID
+    if in_mcid:
+        new_ops.append(([], pikepdf.Operator("EMC")))
+
+    # Update the XObject's content stream
+    new_content = unparse_content_stream(new_ops)
+    xobj.write(new_content)
+
+    return element_mcids, len(page_elements)
+
+
+def add_content_tags(
+    pdf_path: str,
+    elements: List[dict],
+    output_path: Optional[str] = None,
+    use_ai_formula_descriptions: bool = False,
+    formula_descriptions: Optional[dict] = None,
+) -> str:
+    """
+    Add structure elements for all detected content (headings, paragraphs, formulas).
+
+    This function REPLACES any existing structure tree content with the new
+    content-based tags. The original PDF may have Figure-only tags that don't
+    properly represent the document structure.
+
+    Args:
+        pdf_path: Path to input PDF
+        elements: List of element dicts from detect_content_elements()
+        output_path: Optional output path
+        use_ai_formula_descriptions: If True, use pre-generated AI descriptions for formulas
+        formula_descriptions: Dict mapping (page, block_idx) to AI-generated descriptions
+
+    Returns:
+        Path to output PDF
+    """
+    if output_path is None:
+        p = Path(pdf_path)
+        output_path = str(p.parent / f"{p.stem}_content_tagged{p.suffix}")
+
+    if formula_descriptions is None:
+        formula_descriptions = {}
+
+    with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+        # Create structure tree with per-element MCIDs
+        # Each element gets its own MCID in the Form XObject content stream
+
+        # Create Document element
+        doc_elem = pdf.make_indirect(Dictionary({
+            "/Type": Name.StructElem,
+            "/S": Name.Document,
+            "/K": Array([]),
+        }))
+
+        # Map element types to PDF structure element names
+        type_name_map = {
+            "H1": Name.H1,
+            "H2": Name.H2,
+            "H3": Name.H3,
+            "P": Name.P,
+            "Formula": Name.Formula,
+        }
+
+        # Group elements by page
+        elements_by_page = {}
+        for i, elem in enumerate(elements):
+            page_num = elem["page"]
+            if page_num not in elements_by_page:
+                elements_by_page[page_num] = []
+            elem["global_idx"] = i  # Track global index
+            elements_by_page[page_num].append(elem)
+
+        # Track structure elements for ParentTree
+        parent_tree_entries = {}  # page_num -> list of struct_elem refs indexed by MCID
+
+        # Process each page
+        for page_num in sorted(elements_by_page.keys()):
+            page_elements = elements_by_page[page_num]
+            page = pdf.pages[page_num]
+            page_ref = page.obj
+
+            parent_tree_entries[page_num] = []
+
+            # Get the Form XObject that contains the actual content
+            xobj = None
+            xobj_name = None
+            if hasattr(page, 'Resources') and Name.XObject in page.Resources:
+                for name in page.Resources.XObject.keys():
+                    obj = page.Resources.XObject[name]
+                    if obj.get('/Subtype') == Name.Form:
+                        xobj = obj
+                        xobj_name = name
+                        break
+
+            # Create structure elements for each content element
+            struct_elems = []
+            for elem_idx, elem in enumerate(page_elements):
+                elem_type = elem["type"]
+                struct_name = type_name_map.get(elem_type, Name.P)
+                mcid = elem_idx  # MCID within this page
+
+                # Create MCR (Marked Content Reference)
+                mcr = Dictionary({
+                    "/Type": Name.MCR,
+                    "/Pg": page_ref,
+                    "/MCID": mcid,
+                })
+
+                # Create structure element with MCR
+                struct_elem = pdf.make_indirect(Dictionary({
+                    "/Type": Name.StructElem,
+                    "/S": struct_name,
+                    "/P": doc_elem,
+                    "/Pg": page_ref,
+                    "/K": mcr,
+                    "/A": Dictionary({
+                        "/O": Name.Layout,
+                        "/BBox": Array(elem["bbox"]),
+                    }),
+                }))
+
+                # Add alt-text
+                if elem_type == "Formula":
+                    key = (elem["page"], elem["block_idx"])
+                    if use_ai_formula_descriptions and key in formula_descriptions:
+                        alt_text = formula_descriptions[key]
+                    else:
+                        alt_text = f"Mathematical formula: {elem['text'][:200]}"
+                    struct_elem[Name.Alt] = String(alt_text)
+                elif elem_type in ("H1", "H2", "H3"):
+                    struct_elem[Name.Alt] = String(elem["text"][:200])
+
+                doc_elem.K.append(struct_elem)
+                struct_elems.append(struct_elem)
+                parent_tree_entries[page_num].append(struct_elem)
+
+            # Modify page content stream to add MCIDs
+            # Replace the single /Figure BDC with multiple element BDCs
+            existing_ops = list(parse_content_stream(page))
+            new_page_ops = []
+
+            # Track nesting to properly match Figure's EMC
+            in_figure_block = False
+
+            for operands, operator in existing_ops:
+                op_name = str(operator)
+                if op_name == "BDC" and len(operands) >= 1 and str(operands[0]) == "/Figure":
+                    # Replace single Figure tag with multiple element tags
+                    in_figure_block = True
+                    for elem_idx, elem in enumerate(page_elements):
+                        struct_name = type_name_map.get(elem["type"], Name.P)
+                        props = Dictionary({"/MCID": elem_idx})
+                        new_page_ops.append(([struct_name, props], pikepdf.Operator("BDC")))
+                elif op_name == "EMC" and in_figure_block:
+                    # Close all the element tags (only for the Figure block's EMC)
+                    in_figure_block = False
+                    for _ in page_elements:
+                        new_page_ops.append(([], pikepdf.Operator("EMC")))
+                else:
+                    new_page_ops.append((operands, operator))
+
+            # Update page content stream
+            new_content = unparse_content_stream(new_page_ops)
+            page.Contents = pdf.make_stream(new_content)
+            page.StructParents = page_num
+
+        # Build ParentTree
+        nums_array = Array([])
+        for page_num in sorted(parent_tree_entries.keys()):
+            struct_refs = Array(parent_tree_entries[page_num])
+            nums_array.append(page_num)
+            nums_array.append(struct_refs)
+
+        parent_tree = Dictionary({"/Nums": nums_array})
+
+        # Create StructTreeRoot
+        struct_tree = pdf.make_indirect(Dictionary({
+            "/Type": Name.StructTreeRoot,
+            "/K": Array([doc_elem]),
+            "/ParentTree": parent_tree,
+            "/ParentTreeNextKey": len(pdf.pages),
+        }))
+
+        doc_elem.P = struct_tree
+        pdf.Root.StructTreeRoot = struct_tree
+
+        pdf.save(output_path)
+
+    return output_path
+
+
+def generate_formula_descriptions(
+    pdf_path: str,
+    elements: List[dict],
+    max_formulas: int = 50,
+) -> dict:
+    """
+    Generate AI descriptions for formula elements by rendering and sending to Gemini.
+
+    Args:
+        pdf_path: Path to the PDF file
+        elements: List of content elements from detect_content_elements()
+        max_formulas: Maximum number of formulas to process (to limit API calls)
+
+    Returns:
+        Dict mapping (page, block_idx) to description string
+    """
+    from .ai_describer import describe_formula_from_pdf
+
+    descriptions = {}
+    formula_count = 0
+
+    for elem in elements:
+        if elem["type"] != "Formula":
+            continue
+
+        if formula_count >= max_formulas:
+            break
+
+        key = (elem["page"], elem["block_idx"])
+        bbox = tuple(elem["bbox"])
+
+        try:
+            description = describe_formula_from_pdf(
+                pdf_path=pdf_path,
+                page_num=elem["page"],
+                bbox=bbox,
+            )
+            descriptions[key] = description
+            formula_count += 1
+        except Exception as e:
+            # Fallback on error
+            descriptions[key] = f"Mathematical formula: {elem['text'][:100]}"
+
+    return descriptions
+
+
 def add_heading_tags(
     pdf_path: str,
     headings: List[dict],
@@ -626,7 +1085,10 @@ def create_full_structure(
     author: str = "",
     lang: str = "en-US",
     tag_headings: bool = True,
+    tag_all_content: bool = True,
     fix_links: bool = True,
+    use_ai_formula_descriptions: bool = False,
+    max_ai_formulas: int = 50,
 ) -> dict:
     """
     Create comprehensive PDF/UA structure including all accessibility features.
@@ -634,7 +1096,8 @@ def create_full_structure(
     This is an enhanced version of create_basic_structure that also:
     - Adds XMP metadata stream
     - Adds Tabs key to pages with annotations
-    - Optionally tags headings
+    - Tags all content elements (headings, paragraphs, formulas)
+    - Optionally uses AI (Gemini Vision) to describe formulas
     - Optionally fixes link annotations
 
     Args:
@@ -643,11 +1106,25 @@ def create_full_structure(
         title: Document title
         author: Document author
         lang: Document language
-        tag_headings: Whether to detect and tag headings
+        tag_headings: Whether to detect and tag headings (legacy, use tag_all_content)
+        tag_all_content: Whether to tag all content (headings, paragraphs, formulas)
         fix_links: Whether to add alt-text to links
+        use_ai_formula_descriptions: If True, use Gemini Vision API to generate human-readable
+            descriptions for mathematical formulas (e.g., "A 3x3 matrix with values...").
+            If False (default), formulas get raw extracted text which may contain
+            unreadable characters. Requires GEMINI_API_KEY in environment.
+        max_ai_formulas: Maximum number of formulas to process with AI (default: 50).
+            Set higher to cover all formulas, or lower to reduce processing time.
+            Formulas beyond this limit fall back to raw text extraction.
 
     Returns:
-        Dict with output_path and statistics
+        Dict with output_path and statistics including:
+        - output_path: Path to the generated PDF
+        - headings_tagged: Number of H1/H2/H3 elements tagged
+        - paragraphs_tagged: Number of P elements tagged
+        - formulas_tagged: Number of Formula elements tagged
+        - ai_formula_descriptions: Number of formulas described by AI (if enabled)
+        - links_fixed: Number of link annotations with added alt-text
     """
     if output_path is None:
         p = Path(pdf_path)
@@ -658,6 +1135,8 @@ def create_full_structure(
         "xmp_added": False,
         "tabs_pages_modified": 0,
         "headings_tagged": 0,
+        "paragraphs_tagged": 0,
+        "formulas_tagged": 0,
         "links_fixed": 0,
     }
 
@@ -704,15 +1183,49 @@ def create_full_structure(
 
         pdf.save(output_path)
 
-    # 4. Tag headings (if requested)
-    if tag_headings:
+    # 4. Tag all content (headings, paragraphs, formulas) - NEW comprehensive approach
+    if tag_all_content:
+        elements = detect_content_elements(output_path)
+        if elements:
+            # Generate AI descriptions for formulas if requested
+            formula_descriptions = {}
+            if use_ai_formula_descriptions:
+                formula_descriptions = generate_formula_descriptions(
+                    pdf_path=output_path,
+                    elements=elements,
+                    max_formulas=max_ai_formulas,
+                )
+                result["ai_formula_descriptions"] = len(formula_descriptions)
+
+            add_content_tags(
+                output_path, elements, output_path,
+                use_ai_formula_descriptions=use_ai_formula_descriptions,
+                formula_descriptions=formula_descriptions,
+            )
+
+            # Count by type
+            for elem in elements:
+                if elem["type"] in ("H1", "H2", "H3"):
+                    result["headings_tagged"] += 1
+                elif elem["type"] == "P":
+                    result["paragraphs_tagged"] += 1
+                elif elem["type"] == "Formula":
+                    result["formulas_tagged"] += 1
+
+            # Include sample elements in result
+            result["elements_sample"] = [
+                {"type": e["type"], "text": e["text"][:50], "page": e["page"]}
+                for e in elements[:15]
+            ]
+    elif tag_headings:
+        # Legacy: only tag headings
         headings = detect_headings(output_path)
         if headings:
             add_heading_tags(output_path, headings, output_path)
             result["headings_tagged"] = len(headings)
             result["headings"] = [
                 {"level": h["level"], "text": h["text"][:50], "page": h["page"]}
-                for h in headings[:10]  # Only include first 10 in result
+                for h in headings[:10]
             ]
 
     # 5. Fix link annotations (if requested)

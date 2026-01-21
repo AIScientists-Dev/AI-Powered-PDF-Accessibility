@@ -342,6 +342,16 @@ async def list_tools():
                         "description": "Whether to add alt-text to link annotations",
                         "default": True,
                     },
+                    "use_ai_formula_descriptions": {
+                        "type": "boolean",
+                        "description": "Use Gemini Vision AI to generate human-readable descriptions for mathematical formulas (e.g., 'A 3x3 matrix with row 1: 1, 2, 3...'). Without AI, formulas may show unreadable characters. Requires GEMINI_API_KEY.",
+                        "default": False,
+                    },
+                    "max_ai_formulas": {
+                        "type": "integer",
+                        "description": "Maximum number of formulas to describe with AI. Formulas beyond this limit use raw text extraction.",
+                        "default": 50,
+                    },
                 },
                 "required": ["pdf_path"],
             },
@@ -834,6 +844,8 @@ async def call_tool(name: str, arguments: dict):
         lang = arguments.get("lang", "en-US")
         tag_headings = arguments.get("tag_headings", True)
         fix_links = arguments.get("fix_links", True)
+        use_ai_formula_descriptions = arguments.get("use_ai_formula_descriptions", False)
+        max_ai_formulas = arguments.get("max_ai_formulas", 50)
 
         result = create_full_structure(
             pdf_path,
@@ -843,6 +855,8 @@ async def call_tool(name: str, arguments: dict):
             lang=lang,
             tag_headings=tag_headings,
             fix_links=fix_links,
+            use_ai_formula_descriptions=use_ai_formula_descriptions,
+            max_ai_formulas=max_ai_formulas,
         )
 
         result["success"] = True

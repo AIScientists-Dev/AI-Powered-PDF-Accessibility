@@ -119,7 +119,7 @@ This accessibility agent provides **23 specialized tools** that work together:
 
 ### Built on Open Standards
 
-- **MCP (Model Context Protocol)** - Anthropic's standard for AI tool integration
+- **MCP (Model Context Protocol)** - Open standard for AI tool integration
 - **veraPDF** - Industry-standard PDF/UA validation
 - **PDF/UA (ISO 14289)** - International accessibility standard
 """
